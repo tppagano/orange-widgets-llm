@@ -13,11 +13,12 @@ env/
 .venv
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
+.vscode/settings.json
+.vscode/*.code-workspace
 
 # OS
 .DS_Store

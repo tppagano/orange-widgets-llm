@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Chatbot (Production)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/chatbot_new.py",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "name": "Python: Chatbot (UI Only)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/chatbot_new.py",
+            "console": "integratedTerminal",
+            "env": {
+                "CHATBOT_UI_ONLY": "true"
+            }
+        }
+    ]
+}
