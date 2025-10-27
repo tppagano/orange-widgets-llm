@@ -48,16 +48,7 @@ python3 -m pip install --upgrade pip
 pip3 install -r requirements.txt
 ```
 
-3. Configurar variáveis de ambiente:
-
-```powershell
-# Copie o arquivo de exemplo
-cp .env.example .env
-
-# Edite .env conforme necessário (opcional - o padrão já funciona)
-```
-
-4. Instalar e configurar Ollama:
+3. Instalar e configurar Ollama:
 
 ```powershell
 # Baixe o Ollama de https://ollama.ai
@@ -70,71 +61,62 @@ ollama pull znbang/bge:small-en-v1.5-f32
 
 ### Via VS Code (Recomendado)
 
-1. **F5** ou **Run > Start Debugging**
-2. Selecione uma das configurações:
-   - **"Python: Chatbot (Production)"** - Executa com LLM real (usa configurações do `.env`)
-   - **"Python: Chatbot (UI Only)"** - Executa com respostas mockadas (rápido para testar UI)
+O projeto inclui configurações prontas em `.vscode/launch.json`:
+
+1. Abra o projeto no VS Code
+2. **Ctrl+Shift+P** → **"Python: Select Interpreter"** → Escolha `.\chatbotenv\Scripts\python.exe`
+3. **F5** ou **Run > Start Debugging**
+4. Selecione uma das configurações:
+   - **"Python: Chatbot (Production)"** - Executa com LLM real
+   - **"Python: Chatbot (UI Only)"** - Executa com respostas mockadas (rápido para testar UI, não salva no CSV)
 
 ### Via Terminal
 
 ```powershell
+# Modo produção (com LLM)
 python chatbot_new.py
-```
 
-Para modo UI apenas sem carregar LLM:
-
-```powershell
-# Windows PowerShell
+# Modo UI apenas (sem carregar LLM)
 $env:CHATBOT_UI_ONLY="true"; python chatbot_new.py
-
-# Linux/macOS
-CHATBOT_UI_ONLY=true python chatbot_new.py
 ```
 
-## Configuração
-
-O projeto usa variáveis de ambiente para configuração. Veja `.env.example` para opções disponíveis:
-
-- `CHATBOT_UI_ONLY`: Define se deve carregar o LLM real ou usar respostas mockadas
-  - `false` (padrão): Modo produção com LLM real
-  - `true`: Modo UI apenas para testes rápidos de interface
-
-## Executando o chatbot
-
-Você pode executar os scripts de entrada diretamente. Exemplos:
-
-```powershell
-python chatbot.py
-```
-
-ou
-
-```powershell
-python chatbot_new.py
-```
-
-No Linux / macOS, use `python3` se o comando `python` apontar para Python 2.x:
+No Linux/macOS:
 
 ```bash
-python3 chatbot.py
-# ou
+# Modo produção
 python3 chatbot_new.py
+
+# Modo UI apenas
+CHATBOT_UI_ONLY=true python3 chatbot_new.py
 ```
 
-Verifique o conteúdo dos arquivos para saber qual script atende melhor ao seu fluxo.
+## Estrutura do Projeto
+
+```
+chatbot/
+├── .vscode/
+│   └── launch.json          # Configurações de debug (incluído no repositório)
+├── chatbotenv/              # Ambiente virtual (não versionado)
+├── chatbot_new.py           # Interface principal com PyQt5
+├── llm.py                   # Integração com Llama 3.1 via Ollama
+├── conversas.csv            # Histórico de conversas (não versionado)
+└── requirements.txt         # Dependências Python
+```
 
 ## Arquivos importantes
 
-- `chatbot.py` — script principal (ponto de entrada)
-- `chatbot_new.py` — versão alternativa / em desenvolvimento
-- `llm.py` — adaptação/integração com LLMs (verificar uso de chaves/variáveis de ambiente)
-- `conversas.csv` — registros de conversas / dataset
-- `requirements.txt` — dependências Python
+- `chatbot_new.py` - Interface principal do chatbot com PyQt5
+- `llm.py` - Configuração e integração com Llama 3.1 via Ollama
+- `conversas.csv` - Armazena histórico de conversas e avaliações (gerado automaticamente)
+- `requirements.txt` - Dependências Python
+- `.vscode/launch.json` - Configurações de debug do VS Code (versionado)
 
 ## Notas de desenvolvimento
 
-- O projeto foi desenvolvido em Windows com Python 3.9. O diretório `chatbotenv` contém um ambiente virtual de exemplo. Recomenda-se criar seu próprio venv para evitar conflitos de PATH e permissão.
-- Se ocorrerem erros de importação, ative o ambiente virtual e reinstale as dependências.
+- O projeto foi desenvolvido em Windows com Python 3.9
+- Ambiente virtual recomendado para evitar conflitos de dependências
+- As configurações de debug do VS Code (`.vscode/launch.json`) estão incluídas no repositório
+- Modo UI Only é útil para testar interface sem carregar o LLM (mais rápido)
 
 ## Solução de problemas
 

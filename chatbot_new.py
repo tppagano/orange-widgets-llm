@@ -3,13 +3,6 @@ import sys
 import os
 import csv
 
-# Load environment variables from .env file if it exists
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv not installed, will use system env vars only
-
 # UI_ONLY MODE: When enabled, uses mock responses without loading the LLM
 UI_ONLY_MODE = os.getenv('CHATBOT_UI_ONLY', 'false').lower() in ('true', '1', 'yes')
 
