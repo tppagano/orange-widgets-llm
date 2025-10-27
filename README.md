@@ -30,7 +30,7 @@ chatbotenv\Scripts\activate.bat
 - No Linux / macOS (bash/zsh):
 
 ```bash
-python3.9 -m venv chatbotenv
+python3 -m venv chatbotenv
 source chatbotenv/bin/activate
 ```
 
