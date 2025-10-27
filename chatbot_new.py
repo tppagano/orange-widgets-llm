@@ -3,10 +3,17 @@ import sys
 import os
 import csv
 
-# DEBUG MODE: Set to True to disable LLM loading and use mock responses
-DEBUG_MODE = True
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, will use system env vars only
 
-if not DEBUG_MODE:
+# UI_ONLY MODE: When enabled, uses mock responses without loading the LLM
+UI_ONLY_MODE = os.getenv('CHATBOT_UI_ONLY', 'false').lower() in ('true', '1', 'yes')
+
+if not UI_ONLY_MODE:
     import llm
 
 from PyQt5.QtWidgets import (
@@ -188,6 +195,7 @@ class ChatBotUI(QWidget):
         input_layout = QHBoxLayout()
         self.text_input = QTextEdit()
         self.text_input.setFixedHeight(60)
+        self.text_input.keyPressEvent = self.text_input_key_press
         self.send_button = QPushButton("Enviar")
         self.send_button.clicked.connect(self.on_send)
         input_layout.addWidget(self.text_input)
@@ -252,6 +260,22 @@ class ChatBotUI(QWidget):
 
         # carrega mensagens
         self.reload_chat_messages()
+
+    def text_input_key_press(self, event):
+        """Handle key press events in text input"""
+        from PyQt5.QtCore import Qt as QtKey
+        
+        # Check if Enter is pressed without Shift
+        if event.key() in (QtKey.Key_Return, QtKey.Key_Enter):
+            if not event.modifiers() & QtKey.ShiftModifier:
+                # Send message
+                self.on_send()
+                event.accept()
+                return
+            # If Shift+Enter, allow new line (default behavior)
+        
+        # Call the original keyPressEvent for other keys
+        QTextEdit.keyPressEvent(self.text_input, event)
 
     def on_llm_changed(self, index):
         if self.current_chat_id is None:
@@ -405,25 +429,34 @@ class ChatBotUI(QWidget):
         self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
 
         # --- Aqui você integraria com a LLM real ---
-        if DEBUG_MODE:
+        if UI_ONLY_MODE:
             # Resposta mockada para testes rápidos de UI
             bot_response_text = f"Resposta mockada ({llm_used}) para: '{text}'. Esta é uma resposta de teste para avaliar a interface do chatbot sem carregar o modelo LLM."
         else:
-            # Resposta real do LLM
-            bot_response_text = f"Resposta ({llm_used}) para: {llm.chain.invoke({'question': text})}"
+            # Resposta real do LLM com histórico
+            # Prepara o histórico da conversa (apenas mensagens com resposta completa)
+            chat_history = []
+            for msg in chat.messages[:-1]:  # Exclui a mensagem atual que ainda não tem resposta
+                if msg.mensagem_usuario and msg.resposta_bot:
+                    chat_history.append((msg.mensagem_usuario, msg.resposta_bot))
+            
+            # Cria chain com histórico e invoca
+            chain_with_history = llm.create_chain_with_history(chat_history)
+            bot_response_text = chain_with_history.invoke(text)
         
         user_msg.resposta_bot = bot_response_text
 
-        # salva no CSV
-        row = {
-            "mensagem_id": user_msg.mensagem_id,
-            "chat_id": user_msg.chat_id,
-            "mensagem_usuario": user_msg.mensagem_usuario,
-            "resposta_bot": user_msg.resposta_bot,
-            "llm_usada": user_msg.llm_usada,
-            "avaliacao": user_msg.avaliacao
-        }
-        append_row(row)
+        # salva no CSV apenas se não estiver em modo UI_ONLY
+        if not UI_ONLY_MODE:
+            row = {
+                "mensagem_id": user_msg.mensagem_id,
+                "chat_id": user_msg.chat_id,
+                "mensagem_usuario": user_msg.mensagem_usuario,
+                "resposta_bot": user_msg.resposta_bot,
+                "llm_usada": user_msg.llm_usada,
+                "avaliacao": user_msg.avaliacao
+            }
+            append_row(row)
 
         # recarrega para mostrar resposta e selector
         self.reload_chat_messages()
@@ -448,26 +481,27 @@ class ChatBotUI(QWidget):
         else:
             found.avaliacao = str(rating)
 
-        # atualiza CSV
-        rows = read_all_rows()
-        changed = False
-        for r in rows:
-            if str(r.get("mensagem_id", "")) == mid:
-                r["avaliacao"] = found.avaliacao
-                changed = True
-                break
-        if changed:
-            write_all_rows(rows)
-        else:
-            row = {
-                "mensagem_id": found.mensagem_id,
-                "chat_id": found.chat_id,
-                "mensagem_usuario": found.mensagem_usuario,
-                "resposta_bot": found.resposta_bot,
-                "llm_usada": found.llm_usada,
-                "avaliacao": found.avaliacao
-            }
-            append_row(row)
+        # atualiza CSV apenas se não estiver em modo UI_ONLY
+        if not UI_ONLY_MODE:
+            rows = read_all_rows()
+            changed = False
+            for r in rows:
+                if str(r.get("mensagem_id", "")) == mid:
+                    r["avaliacao"] = found.avaliacao
+                    changed = True
+                    break
+            if changed:
+                write_all_rows(rows)
+            else:
+                row = {
+                    "mensagem_id": found.mensagem_id,
+                    "chat_id": found.chat_id,
+                    "mensagem_usuario": found.mensagem_usuario,
+                    "resposta_bot": found.resposta_bot,
+                    "llm_usada": found.llm_usada,
+                    "avaliacao": found.avaliacao
+                }
+                append_row(row)
         
         # Recarrega as mensagens para atualizar a visualização das estrelas
         self.reload_chat_messages()

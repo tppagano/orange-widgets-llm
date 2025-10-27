@@ -27,6 +27,7 @@ desktop.ini
 # Project specific
 conversas.csv
 *.pdf
+.env
 
 # Distribution / packaging
 .Python

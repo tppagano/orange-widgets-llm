@@ -5,6 +5,7 @@ Este repositório contém um projeto simples de chatbot em Python. Os arquivos p
 ## Requisitos
 
 - Python 3.9
+- Ollama com modelo `llama3.1:8b` instalado
 - Dependências listadas em `requirements.txt`
 
 É recomendado usar um ambiente virtual para isolar dependências.
@@ -46,6 +47,57 @@ No Linux / macOS, os mesmos comandos funcionam (use `python3`/`pip3` se necessá
 python3 -m pip install --upgrade pip
 pip3 install -r requirements.txt
 ```
+
+3. Configurar variáveis de ambiente:
+
+```powershell
+# Copie o arquivo de exemplo
+cp .env.example .env
+
+# Edite .env conforme necessário (opcional - o padrão já funciona)
+```
+
+4. Instalar e configurar Ollama:
+
+```powershell
+# Baixe o Ollama de https://ollama.ai
+# Depois instale os modelos:
+ollama pull llama3.1:8b
+ollama pull znbang/bge:small-en-v1.5-f32
+```
+
+## Executando o chatbot
+
+### Via VS Code (Recomendado)
+
+1. **F5** ou **Run > Start Debugging**
+2. Selecione uma das configurações:
+   - **"Python: Chatbot (Production)"** - Executa com LLM real (usa configurações do `.env`)
+   - **"Python: Chatbot (UI Only)"** - Executa com respostas mockadas (rápido para testar UI)
+
+### Via Terminal
+
+```powershell
+python chatbot_new.py
+```
+
+Para modo UI apenas sem carregar LLM:
+
+```powershell
+# Windows PowerShell
+$env:CHATBOT_UI_ONLY="true"; python chatbot_new.py
+
+# Linux/macOS
+CHATBOT_UI_ONLY=true python chatbot_new.py
+```
+
+## Configuração
+
+O projeto usa variáveis de ambiente para configuração. Veja `.env.example` para opções disponíveis:
+
+- `CHATBOT_UI_ONLY`: Define se deve carregar o LLM real ou usar respostas mockadas
+  - `false` (padrão): Modo produção com LLM real
+  - `true`: Modo UI apenas para testes rápidos de interface
 
 ## Executando o chatbot
 
