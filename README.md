@@ -2,10 +2,14 @@
 
 Este repositório contém um projeto simples de chatbot em Python. Os arquivos principais incluem `chatbot.py`, `chatbot_new.py` e uma interface leve em `llm.py`. Conversas e exemplos podem estar em `conversas.csv`.
 
+![Chatbot Screenshot](screenshots/example.png)
+
 ## Requisitos
 
-- Python 3.9
-- Ollama com modelo `llama3.1:8b` instalado
+- [Python 3.9](https://www.python.org/downloads/)
+- [Ollama](https://ollama.ai/download) com os modelos:
+  - `llama3.1:8b` - Modelo de linguagem
+  - `znbang/bge:small-en-v1.5-f32` - Modelo de embeddings
 - Dependências listadas em `requirements.txt`
 
 É recomendado usar um ambiente virtual para isolar dependências.
