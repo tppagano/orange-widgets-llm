@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
     QListWidgetItem, QLabel, QFrame, QScrollArea, QTextEdit, QComboBox,
     QMessageBox
 )
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon, QPixmap, QPainter
 from PyQt5.QtSvg import QSvgRenderer
 
@@ -24,12 +24,94 @@ CSV_FILE = "conversas.csv"
 LLM_DEFAULT = "gemma3"
 LLM_OPTIONS = ["gemma3", "gpt-4o-mini", "gpt-4o", "llama2", "local-llm"]
 
+class SpinnerLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(24, 24)
+
+        self.angle = 0
+        self.renderer = QSvgRenderer(bytearray("""
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45"
+            stroke="#888"
+            stroke-width="10"
+            fill="none"
+            stroke-dasharray="210"
+            stroke-dashoffset="60"
+            stroke-linecap="round"/>
+        </svg>
+        """, encoding="utf-8"))
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.rotate)
+        self.timer.start(50)
+
+    def rotate(self):
+        pix = QPixmap(24, 24)
+        pix.fill(Qt.transparent)
+
+        painter = QPainter(pix)
+        painter.translate(12, 12)
+        painter.rotate(self.angle)
+        painter.translate(-12, -12)
+        self.renderer.render(painter)
+        painter.end()
+
+        self.setPixmap(pix)
+        self.angle = (self.angle + 15) % 360
+
+class TypingLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__("Pensando")
+        self.base = "Pensando"
+        self.dots = 0
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.animate)
+        self.timer.start(500)
+
+    def animate(self):
+        self.dots = (self.dots + 1) % 4
+        self.setText(self.base + "." * self.dots)
+
+
+class LLMWorker(QThread):
+    finished = pyqtSignal(str)
+
+    def __init__(self, llm_used, chat_history, prompt, ui_only=False):
+        super().__init__()
+        self.llm_used = llm_used
+        self.chat_history = chat_history
+        self.prompt = prompt
+        self.ui_only = ui_only
+
+    def run(self):
+        if self.ui_only:
+            response = f"Resposta mockada ({self.llm_used}) para: '{self.prompt}'"
+        else:
+            chain = llm.create_chain_with_history(self.chat_history)
+            response = chain.invoke(self.prompt)
+
+        self.finished.emit(response)
+
 
 def ensure_csv():
     if not os.path.exists(CSV_FILE):
         with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["mensagem_id", "chat_id", "mensagem_usuario", "resposta_bot", "llm_usada", "avaliacao"])
+
+def csv_safe(text: str) -> str:
+    if text is None:
+        return ""
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
+
+
+def csv_unsafed(text: str) -> str:
+    if text is None:
+        return ""
+    return text.replace("\\n", "\n")
+
 
 
 def read_all_rows():
@@ -79,8 +161,8 @@ class ChatMessage:
     def __init__(self, mensagem_id, chat_id, mensagem_usuario, resposta_bot, llm_usada, avaliacao=""):
         self.mensagem_id = str(mensagem_id)
         self.chat_id = str(chat_id)
-        self.mensagem_usuario = mensagem_usuario
-        self.resposta_bot = resposta_bot
+        self.mensagem_usuario = csv_unsafed(mensagem_usuario)
+        self.resposta_bot = csv_unsafed(resposta_bot)
         self.llm_usada = llm_usada
         self.avaliacao = avaliacao
 
@@ -403,56 +485,51 @@ class ChatBotUI(QWidget):
 
     def on_send(self):
         text = self.text_input.toPlainText().strip()
-        if not text:
-            return
-        if self.current_chat_id is None:
-            QMessageBox.warning(self, "Sem conversa", "Nenhuma conversa selecionada.")
+        if not text or self.current_chat_id is None:
             return
 
         chat = self.chats[self.current_chat_id]
         llm_used = chat.llm
         mid = next_message_id()
 
-        # adiciona mensagem do usuário (temporariamente sem resposta)
-        user_msg = ChatMessage(mensagem_id=mid, chat_id=self.current_chat_id,
-                               mensagem_usuario=text, resposta_bot="", llm_usada=llm_used, avaliacao="")
+        # Add user message
+        user_msg = ChatMessage(
+            mensagem_id=mid,
+            chat_id=self.current_chat_id,
+            mensagem_usuario=text,
+            resposta_bot="",
+            llm_usada=llm_used
+        )
         chat.messages.append(user_msg)
         self._add_message_widget_to_ui(user_msg)
         self.text_input.clear()
-        self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
 
-        # --- Aqui você integraria com a LLM real ---
-        if UI_ONLY_MODE:
-            # Resposta mockada para testes rápidos de UI
-            bot_response_text = f"Resposta mockada ({llm_used}) para: '{text}'. Esta é uma resposta de teste para avaliar a interface do chatbot sem carregar o modelo LLM."
-        else:
-            # Resposta real do LLM com histórico
-            # Prepara o histórico da conversa (apenas mensagens com resposta completa)
-            chat_history = []
-            for msg in chat.messages[:-1]:  # Exclui a mensagem atual que ainda não tem resposta
-                if msg.mensagem_usuario and msg.resposta_bot:
-                    chat_history.append((msg.mensagem_usuario, msg.resposta_bot))
-            
-            # Cria chain com histórico e invoca
-            chain_with_history = llm.create_chain_with_history(chat_history)
-            bot_response_text = chain_with_history.invoke(text)
-        
-        user_msg.resposta_bot = bot_response_text
+        # Add typing indicator
+        typing_label, typing_layout = self.add_typing_indicator()
 
-        # salva no CSV apenas se não estiver em modo UI_ONLY
-        if not UI_ONLY_MODE:
-            row = {
-                "mensagem_id": user_msg.mensagem_id,
-                "chat_id": user_msg.chat_id,
-                "mensagem_usuario": user_msg.mensagem_usuario,
-                "resposta_bot": user_msg.resposta_bot,
-                "llm_usada": user_msg.llm_usada,
-                "avaliacao": user_msg.avaliacao
-            }
-            append_row(row)
+        # Prepare history
+        chat_history = [
+            (m.mensagem_usuario, m.resposta_bot)
+            for m in chat.messages[:-1]
+            if m.mensagem_usuario and m.resposta_bot
+        ]
 
-        # recarrega para mostrar resposta e selector
-        self.reload_chat_messages()
+        self.set_sending_state(True)
+
+        # Start worker thread
+        self.worker = LLMWorker(
+            llm_used=llm_used,
+            chat_history=chat_history,
+            prompt=text,
+            ui_only=UI_ONLY_MODE
+        )
+        self.worker.finished.connect(
+            lambda response: self.on_llm_finished(
+                response, user_msg, typing_label, typing_layout
+            )
+        )
+        self.worker.start()
+
 
     def on_star_clicked(self, mensagem_id, rating):
         """Atualiza a avaliação quando uma estrela é clicada"""
@@ -489,8 +566,8 @@ class ChatBotUI(QWidget):
                 row = {
                     "mensagem_id": found.mensagem_id,
                     "chat_id": found.chat_id,
-                    "mensagem_usuario": found.mensagem_usuario,
-                    "resposta_bot": found.resposta_bot,
+                    "mensagem_usuario": csv_safe(found.mensagem_usuario),
+                    "resposta_bot": csv_safe(found.resposta_bot),
                     "llm_usada": found.llm_usada,
                     "avaliacao": found.avaliacao
                 }
@@ -530,8 +607,8 @@ class ChatBotUI(QWidget):
             row = {
                 "mensagem_id": found.mensagem_id,
                 "chat_id": found.chat_id,
-                "mensagem_usuario": found.mensagem_usuario,
-                "resposta_bot": found.resposta_bot,
+                "mensagem_usuario": csv_safe(found.mensagem_usuario),
+                "resposta_bot": csv_safe(found.resposta_bot),
                 "llm_usada": found.llm_usada,
                 "avaliacao": found.avaliacao
             }
@@ -551,12 +628,73 @@ class ChatBotUI(QWidget):
             msg = ChatMessage(
                 mensagem_id=r.get("mensagem_id", ""),
                 chat_id=cid,
-                mensagem_usuario=r.get("mensagem_usuario", ""),
-                resposta_bot=r.get("resposta_bot", ""),
+                mensagem_usuario=csv_unsafed(r.get("mensagem_usuario", "")),
+                resposta_bot=csv_unsafed(r.get("resposta_bot", "")),
                 llm_usada=r.get("llm_usada", LLM_DEFAULT) or LLM_DEFAULT,
                 avaliacao=r.get("avaliacao", "") or ""
             )
             self.chats[cid].messages.append(msg)
+
+    def add_typing_indicator(self):
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        spinner = SpinnerLabel()
+        typing = TypingLabel()
+
+        layout.addWidget(spinner)
+        layout.addWidget(typing)
+        layout.addStretch()
+
+        container.setStyleSheet("""
+            QWidget {
+                background-color: #FFFFFF;
+                border-radius: 8px;
+            }
+        """)
+        container.setMaximumWidth(int(self.width() * 0.4))
+
+        row = QHBoxLayout()
+        row.addWidget(container)
+        row.addStretch()
+
+        self.chat_content_layout.insertLayout(
+            self.chat_content_layout.count() - 1, row
+        )
+
+        self.scroll_area.verticalScrollBar().setValue(
+            self.scroll_area.verticalScrollBar().maximum()
+        )
+
+        return container, row
+
+
+    def on_llm_finished(self, response, user_msg, typing_label, typing_layout):
+        # Remove typing indicator
+        typing_label.deleteLater()
+        self.chat_content_layout.removeItem(typing_layout)
+
+        # Set response
+        user_msg.resposta_bot = response
+
+        if not UI_ONLY_MODE:
+            append_row({
+                "mensagem_id": user_msg.mensagem_id,
+                "chat_id": user_msg.chat_id,
+                "mensagem_usuario": csv_safe(user_msg.mensagem_usuario),
+                "resposta_bot": csv_safe(user_msg.resposta_bot),
+                "llm_usada": user_msg.llm_usada,
+                "avaliacao": user_msg.avaliacao
+            })
+
+        self.set_sending_state(False)
+        self.reload_chat_messages()
+
+    def set_sending_state(self, sending: bool):
+        self.send_button.setDisabled(sending)
+        self.text_input.setDisabled(sending)
 
 
 if __name__ == "__main__":
