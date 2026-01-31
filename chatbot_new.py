@@ -7,12 +7,13 @@ import csv
 UI_ONLY_MODE = os.getenv('CHATBOT_UI_ONLY', 'false').lower() in ('true', '1', 'yes')
 
 if not UI_ONLY_MODE:
-    import llm
+    from rag_backend import create_chain_with_history, ingest_pdfs
+
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
-    QListWidgetItem, QLabel, QFrame, QScrollArea, QTextEdit, QComboBox,
-    QMessageBox
+    QListWidgetItem, QLabel, QScrollArea, QTextEdit, QComboBox,
+    QMessageBox, QFileDialog, QProgressDialog, QDialog
 )
 from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon, QPixmap, QPainter
@@ -20,9 +21,12 @@ from PyQt5.QtSvg import QSvgRenderer
 
 
 
+
 CSV_FILE = "conversas.csv"
 LLM_DEFAULT = "gemma3"
 LLM_OPTIONS = ["gemma3", "gpt-4o-mini", "gpt-4o", "llama2", "local-llm"]
+
+import glob
 
 class SpinnerLabel(QLabel):
     def __init__(self, parent=None):
@@ -75,7 +79,10 @@ class TypingLabel(QLabel):
         self.setText(self.base + "." * self.dots)
 
 
+
+# --- Streaming LLMWorker ---
 class LLMWorker(QThread):
+    partial = pyqtSignal(str)
     finished = pyqtSignal(str)
 
     def __init__(self, llm_used, chat_history, prompt, ui_only=False):
@@ -86,13 +93,51 @@ class LLMWorker(QThread):
         self.ui_only = ui_only
 
     def run(self):
+        import time
+        import re
         if self.ui_only:
             response = f"Resposta mockada ({self.llm_used}) para: '{self.prompt}'"
+            words = re.findall(r'\S+|\s+', response)
+            out = ""
+            for word in words:
+                out += word
+                self.partial.emit(out)
+                time.sleep(0.045)
+            self.finished.emit(response)
         else:
-            chain = llm.create_chain_with_history(self.chat_history)
-            response = chain.invoke(self.prompt)
+            from rag_backend import stream_chain_with_history
+            response = ""
+            buffer = ""
+            last_emit = 0
+            word_pattern = re.compile(r'(\S+\s*)')
+            for chunk in stream_chain_with_history(self.chat_history, self.prompt):
+                buffer += chunk
+                # Find all new words since last_emit
+                for match in word_pattern.finditer(buffer, last_emit):
+                    response = buffer[:match.end()]
+                    self.partial.emit(response)
+                    last_emit = match.end()
+                    time.sleep(0.045)
+            # Emit any remaining text
+            if last_emit < len(buffer):
+                self.partial.emit(buffer)
+                response = buffer
+            self.finished.emit(response)
 
-        self.finished.emit(response)
+class DocumentIngestWorker(QThread):
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self, files):
+        super().__init__()
+        self.files = files
+
+    def run(self):
+        try:
+            ingest_pdfs(self.files)
+            self.finished.emit()
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 def ensure_csv():
@@ -102,12 +147,12 @@ def ensure_csv():
             writer.writerow(["mensagem_id", "chat_id", "mensagem_usuario", "resposta_bot", "llm_usada", "avaliacao"])
 
 def csv_safe(text: str) -> str:
-    if text is None:
-        return ""
+    if text is None or text == "":
+        return "0"
     return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
 
 
-def csv_unsafed(text: str) -> str:
+def csv_unsafe_decode(text: str) -> str:
     if text is None:
         return ""
     return text.replace("\\n", "\n")
@@ -124,14 +169,27 @@ def read_all_rows():
             rows.append(r)
     return rows
 
+def update_rating_only(mensagem_id, new_rating):
+    temp_file = CSV_FILE + ".tmp"
 
-def write_all_rows(rows):
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
-        fieldnames = ["mensagem_id", "chat_id", "mensagem_usuario", "resposta_bot", "llm_usada", "avaliacao"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+    with open(CSV_FILE, "r", newline="", encoding="utf-8") as src, \
+         open(temp_file, "w", newline="", encoding="utf-8") as dst:
+
+        reader = csv.DictReader(src)
+        fieldnames = reader.fieldnames
+
+        writer = csv.DictWriter(dst, fieldnames=fieldnames)
         writer.writeheader()
-        for r in rows:
-            writer.writerow(r)
+
+        for row in reader:
+            if row.get("mensagem_id") == str(mensagem_id):
+                row["avaliacao"] = new_rating if new_rating not in (None, "") else "0"
+            # Always save as '0' if empty
+            if row["avaliacao"] in (None, ""):
+                row["avaliacao"] = "0"
+            writer.writerow(row)
+
+    os.replace(temp_file, CSV_FILE)
 
 
 def append_row(row):
@@ -141,6 +199,9 @@ def append_row(row):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
+        # Always save as '0' if empty
+        if "avaliacao" in row and (row["avaliacao"] is None or row["avaliacao"] == ""):
+            row["avaliacao"] = "0"
         writer.writerow(row)
 
 
@@ -161,8 +222,8 @@ class ChatMessage:
     def __init__(self, mensagem_id, chat_id, mensagem_usuario, resposta_bot, llm_usada, avaliacao=""):
         self.mensagem_id = str(mensagem_id)
         self.chat_id = str(chat_id)
-        self.mensagem_usuario = csv_unsafed(mensagem_usuario)
-        self.resposta_bot = csv_unsafed(resposta_bot)
+        self.mensagem_usuario = csv_unsafe_decode(mensagem_usuario)
+        self.resposta_bot = csv_unsafe_decode(resposta_bot)
         self.llm_usada = llm_usada
         self.avaliacao = avaliacao
 
@@ -183,6 +244,9 @@ class ChatBotUI(QWidget):
 
         ensure_csv()
 
+        # Scan 'input' folder for new PDFs to vectorize
+        self.vectorize_new_documents()
+
         # memória
         self.chats = {}
         self.current_chat_id = None
@@ -202,6 +266,68 @@ class ChatBotUI(QWidget):
         if self.chats:
             first_chat_id = sorted(self.chats.keys(), key=lambda x: int(x))[0]
             self.select_chat(first_chat_id)
+
+    def vectorize_new_documents(self):
+        
+        input_dir = os.path.join(os.getcwd(), "input")
+        if not os.path.exists(input_dir):
+            os.makedirs(input_dir)
+        
+        pdf_files = glob.glob(os.path.join(input_dir, "*.pdf"))
+        if pdf_files:
+            try:
+                from rag_backend import ingest_pdfs
+                ingest_pdfs(pdf_files)
+            except Exception as e:
+                print(f"Erro ao vetorizando documentos: {e}")
+            # UI primeiro (para evitar AttributeError)
+            self.setup_ui()
+            # Add document selector button to the left panel
+            doc_btn = QPushButton("Selecionar documentos")
+            doc_btn.clicked.connect(self.show_document_selector)
+            self.layout().itemAt(0).widget().layout().insertWidget(1, doc_btn)
+
+    def show_document_selector(self):
+        input_dir = os.path.join(os.getcwd(), "input")
+        pdf_files = glob.glob(os.path.join(input_dir, "*.pdf"))
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Selecionar documentos para o chatbot")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        label = QLabel("Selecione os documentos que o chatbot pode acessar:")
+        layout.addWidget(label)
+        list_widget = QListWidget()
+        for pdf in pdf_files:
+            item = QListWidgetItem(os.path.basename(pdf))
+            item.setData(Qt.UserRole, pdf)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            # Pre-check if currently enabled
+            if pdf in getattr(self, "enabled_documents", pdf_files):
+                item.setCheckState(Qt.Checked)
+            else:
+                item.setCheckState(Qt.Unchecked)
+            list_widget.addItem(item)
+        layout.addWidget(list_widget)
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancelar")
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+        def accept():
+            self.enabled_documents = [item.data(Qt.UserRole) for i in range(list_widget.count())
+                                      if list_widget.item(i).checkState() == Qt.Checked]
+            dialog.accept()
+        def reject():
+            dialog.reject()
+        ok_btn.clicked.connect(accept)
+        cancel_btn.clicked.connect(reject)
+        dialog.exec_()
+
+    def get_enabled_documents(self):
+        input_dir = os.path.join(os.getcwd(), "input")
+        pdf_files = glob.glob(os.path.join(input_dir, "*.pdf"))
+        return getattr(self, "enabled_documents", pdf_files)
 
     def create_star_icon(self, filled=True, color="#FFD700"):
         """Creates a star icon from SVG"""
@@ -504,7 +630,7 @@ class ChatBotUI(QWidget):
         self._add_message_widget_to_ui(user_msg)
         self.text_input.clear()
 
-        # Add typing indicator
+        # Add typing indicator and prepare for streaming
         typing_label, typing_layout = self.add_typing_indicator()
 
         # Prepare history
@@ -516,16 +642,44 @@ class ChatBotUI(QWidget):
 
         self.set_sending_state(True)
 
-        # Start worker thread
+        # Add a placeholder for the bot reply bubble (hidden initially)
+        bot_bubble = QLabel("")
+        bot_bubble.setWordWrap(True)
+        bot_bubble.setStyleSheet("background-color: #FFFFFF; padding:8px; border-radius:8px;")
+        bot_bubble.setMaximumWidth(int(self.width() * 0.6))
+        bot_row = QHBoxLayout()
+        bot_row.addWidget(bot_bubble)
+        bot_row.addStretch()
+        # Insert after typing indicator, but before the stretch
+        self.chat_content_layout.insertLayout(self.chat_content_layout.count() - 1, bot_row)
+        bot_bubble.setVisible(False)
+
+        # Start worker thread with streaming
         self.worker = LLMWorker(
             llm_used=llm_used,
             chat_history=chat_history,
             prompt=text,
             ui_only=UI_ONLY_MODE
         )
+
+        # For streaming: update the bot reply bubble as tokens arrive
+        self._streaming_started = False
+        def update_bot_bubble(partial_text):
+            if not self._streaming_started:
+                # Remove typing indicator and show the bubble
+                typing_label.deleteLater()
+                self.chat_content_layout.removeItem(typing_layout)
+                bot_bubble.setVisible(True)
+                self._streaming_started = True
+            bot_bubble.setText(partial_text)
+            user_msg.resposta_bot = partial_text
+            # Scroll to bottom as text grows
+            self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
+
+        self.worker.partial.connect(update_bot_bubble)
         self.worker.finished.connect(
             lambda response: self.on_llm_finished(
-                response, user_msg, typing_label, typing_layout
+                response, user_msg, bot_bubble, bot_row
             )
         )
         self.worker.start()
@@ -561,7 +715,7 @@ class ChatBotUI(QWidget):
                     changed = True
                     break
             if changed:
-                write_all_rows(rows)
+                update_rating_only(mensagem_id, found.avaliacao)
             else:
                 row = {
                     "mensagem_id": found.mensagem_id,
@@ -602,7 +756,7 @@ class ChatBotUI(QWidget):
                 changed = True
                 break
         if changed:
-            write_all_rows(rows)
+            update_rating_only(mensagem_id, found.avaliacao)
         else:
             row = {
                 "mensagem_id": found.mensagem_id,
@@ -628,8 +782,8 @@ class ChatBotUI(QWidget):
             msg = ChatMessage(
                 mensagem_id=r.get("mensagem_id", ""),
                 chat_id=cid,
-                mensagem_usuario=csv_unsafed(r.get("mensagem_usuario", "")),
-                resposta_bot=csv_unsafed(r.get("resposta_bot", "")),
+                mensagem_usuario=csv_unsafe_decode(r.get("mensagem_usuario", "")),
+                resposta_bot=csv_unsafe_decode(r.get("resposta_bot", "")),
                 llm_usada=r.get("llm_usada", LLM_DEFAULT) or LLM_DEFAULT,
                 avaliacao=r.get("avaliacao", "") or ""
             )
@@ -671,12 +825,10 @@ class ChatBotUI(QWidget):
         return container, row
 
 
-    def on_llm_finished(self, response, user_msg, typing_label, typing_layout):
-        # Remove typing indicator
-        typing_label.deleteLater()
-        self.chat_content_layout.removeItem(typing_layout)
-
-        # Set response
+    def on_llm_finished(self, response, user_msg, bot_bubble, bot_row):
+        # Ensure the bubble is visible and set to the final response
+        bot_bubble.setVisible(True)
+        bot_bubble.setText(response)
         user_msg.resposta_bot = response
 
         if not UI_ONLY_MODE:
@@ -696,6 +848,51 @@ class ChatBotUI(QWidget):
         self.send_button.setDisabled(sending)
         self.text_input.setDisabled(sending)
 
+    def on_add_documents(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Selecionar documentos",
+            "",
+            "PDF files (*.pdf)"
+        )
+
+        if not files:
+            return
+
+        # Progress dialog (non-blocking)
+        self.ingest_dialog = QProgressDialog(
+            "Vetorizando documentos…",
+            None,
+            0,
+            0,
+            self
+        )
+        self.ingest_dialog.setWindowTitle("Processando")
+        self.ingest_dialog.setWindowModality(Qt.WindowModal)
+        self.ingest_dialog.setCancelButton(None)
+        self.ingest_dialog.show()
+
+        # Start worker
+        self.ingest_worker = DocumentIngestWorker(files)
+        self.ingest_worker.finished.connect(self.on_ingest_finished)
+        self.ingest_worker.error.connect(self.on_ingest_error)
+        self.ingest_worker.start()
+
+    def on_ingest_finished(self):
+        self.ingest_dialog.close()
+        QMessageBox.information(
+            self,
+            "Concluído",
+            "Documentos adicionados e vetorizados com sucesso."
+        )
+        
+    def on_ingest_error(self, message):
+        self.ingest_dialog.close()
+        QMessageBox.critical(
+            self,
+            "Erro",
+            f"Falha ao processar documentos:\n{message}"
+        )
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

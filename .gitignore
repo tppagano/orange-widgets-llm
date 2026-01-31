@@ -28,7 +28,6 @@ desktop.ini
 # Project specific
 conversas.csv
 *.pdf
-.env
 
 # Distribution / packaging
 .Python
@@ -87,3 +86,5 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+vector_store/*
