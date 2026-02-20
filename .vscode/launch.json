@@ -18,6 +18,24 @@
             "env": {
                 "CHATBOT_UI_ONLY": "true"
             }
+        },
+        {
+            "name": "Python: Orange Widget Preview",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/orangecontrib/chatbot/widgets/owchatbot.py",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "name": "Python: Orange Widget (UI Only)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/orangecontrib/chatbot/widgets/owchatbot.py",
+            "console": "integratedTerminal",
+            "env": {
+                "CHATBOT_UI_ONLY": "true"
+            }
         }
     ]
 }
