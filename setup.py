@@ -67,8 +67,6 @@ ENTRY_POINTS = {
     ),
 }
 
-NAMESPACE_PACKAGES = ["orangecontrib"]
-
 if __name__ == "__main__":
     setup(
         name=NAME,
@@ -85,7 +83,6 @@ if __name__ == "__main__":
         extras_require=EXTRAS_REQUIRE,
         entry_points=ENTRY_POINTS,
         keywords=KEYWORDS,
-        namespace_packages=NAMESPACE_PACKAGES,
         classifiers=CLASSIFIERS,
         zip_safe=False,
     )
