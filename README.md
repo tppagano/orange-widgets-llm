@@ -2,7 +2,7 @@
 
 Um add-on para Orange3 que fornece um chatbot interativo com capacidades de Retrieval-Augmented Generation (RAG) através de uma arquitetura modular.
 
-![Screenshot do Chatbot](screenshots/example.png)
+![Screenshot do Chatbot](screenshots/example.jpeg)
 
 ## Recursos
 
