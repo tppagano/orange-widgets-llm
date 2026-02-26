@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 import os
 
 NAME = "Orange3-Chatbot"
@@ -21,7 +21,7 @@ KEYWORDS = [
     "natural language processing"
 ]
 
-PACKAGES = find_packages()
+PACKAGES = find_namespace_packages()
 
 PACKAGE_DATA = {
     "orangecontrib.chatbot": ["tutorials/*.ows"],
@@ -84,5 +84,6 @@ if __name__ == "__main__":
         entry_points=ENTRY_POINTS,
         keywords=KEYWORDS,
         classifiers=CLASSIFIERS,
+        include_package_data=True,
         zip_safe=False,
     )
