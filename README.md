@@ -181,7 +181,6 @@ orange3-chatbot/
 ├── conversas.csv            # Histórico de conversação
 ├── setup.py                 # Configuração de instalação
 ├── MANIFEST.in              # Manifesto do pacote
-├── requirements.txt         # Dependências Python
 └── README.md               # Este arquivo
 ```
 
