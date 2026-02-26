@@ -1,6 +1,15 @@
 # Add-on Orange3 Chatbot - Guia de Instalação
 
-## Início Rápido
+## Escolha seu Gerenciador de Ambiente
+
+Este add-on suporta instalação com **pip** (venv, virtualenv, pyenv) ou **Conda**. Escolha o método que você prefere:
+
+- **[Instalação com pip](#instalação-com-pip)** - Recomendado para usuários de venv, virtualenv, pyenv
+- **[Instalação com Conda](#instalação-com-conda)** - Recomendado para usuários Conda, especialmente com GPU
+
+---
+
+## Instalação com pip
 
 ### 1. Instalar o Orange3 (se ainda não estiver instalado)
 
@@ -60,6 +69,83 @@ orange-canvas
 
 Então procure a categoria "Chatbot" na caixa de ferramentas de widgets.
 
+---
+
+## Instalação com Conda
+
+### 1. Criar e Ativar Ambiente Conda
+
+```bash
+# Criar ambiente
+conda create -n chatbot python=3.9
+conda activate chatbot
+```
+
+### 2. Escolher Método de Instalação
+
+#### Opção A: Híbrido Conda + Pip (Recomendado para GPU)
+
+Instale pacotes críticos via conda, especialmente PyTorch para suporte GPU:
+
+```bash
+# Instalar Orange3 via conda-forge
+conda install -c conda-forge orange3
+
+# Instalar PyTorch via conda (melhor para GPU)
+conda install pytorch -c pytorch
+# OU para GPU com CUDA:
+# conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
+
+# Instalar dependências restantes via pip
+pip install langchain-community chromadb sentence-transformers
+
+# Instalar add-on em modo desenvolvimento
+pip install -e .
+```
+
+#### Opção B: Apenas Pip dentro do Conda
+
+Use apenas pip dentro do ambiente conda:
+
+```bash
+# Instalar tudo com pip
+pip install Orange3
+pip install -e .
+```
+
+⚠️ **Aviso**: PyTorch instalado via pip pode ter problemas com GPU. Use a Opção A se precisar de aceleração GPU.
+
+### 3. Configurar Ollama
+
+```bash
+# Baixar de https://ollama.ai e instalar
+
+# Baixar modelos necessários
+ollama pull llama3.1:8b
+ollama pull znbang/bge:small-en-v1.5-f32
+```
+
+### 4. Testar o Widget
+
+```bash
+# Iniciar Orange3
+orange-canvas
+```
+
+Então procure a categoria "Chatbot" na caixa de ferramentas de widgets.
+
+### 5. Verificar Instalação
+
+```bash
+# Verificar se o Orange3 reconhece o add-on
+python -c "from orangecontrib.chatbot import __version__; print(f'Versão do add-on Chatbot: {__version__}')"
+
+# Verificar PyTorch e CUDA (se aplicável)
+python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA disponível: {torch.cuda.is_available()}')"
+```
+
+---
+
 ## Desinstalar
 
 ```bash
@@ -106,8 +192,8 @@ orange-canvas
 ### Erros de importação para rag_backend
 
 ```bash
-# Certifique-se de que todas as dependências estão instaladas
-pip install -r requirements.txt
+# Reinstalar o add-on para garantir que todas as dependências estão instaladas
+pip install -e . --force-reinstall
 
 # Verificar ChromaDB
 pip show chromadb
