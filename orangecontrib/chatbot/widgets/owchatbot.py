@@ -31,7 +31,7 @@ except ImportError:
     RAG_AVAILABLE = False
 
 CSV_FILE = "conversas.csv"
-LLM_DEFAULT = "gemma3"
+LLM_DEFAULT = "llama3.1:8b"
 
 
 # ====================
@@ -296,6 +296,7 @@ class OWChatbot(widget.OWWidget):
         self.chats = {}
         self.current_chat_id = None
         self.llm_config = None
+        self.selected_llm = LLM_DEFAULT
 
         # GUI
         self._setup_gui()
@@ -303,18 +304,16 @@ class OWChatbot(widget.OWWidget):
         # Load existing data
         self.load_chats_from_csv()
 
-        # Create initial chat if needed
-        if not self.chats:
-            self.create_new_chat()
-
         # Update UI
         self.refresh_chat_list()
         if self.chats:
             first_chat_id = sorted(self.chats.keys(), key=lambda x: int(x))[0]
             self.select_chat(first_chat_id)
 
-        # Note: Document vectorization is now done manually via "Add Documents" button
-        # to avoid blocking the UI during widget initialization
+        # Initially disable controls until LLM is connected
+        self.add_chat_button.setEnabled(False)
+        self.send_button.setEnabled(False)
+        self.status_label.setText("Connect an LLM widget to start chatting")
 
     def _setup_gui(self):
         # Control area (left panel)
@@ -377,14 +376,27 @@ class OWChatbot(widget.OWWidget):
             self.llm_info_label.setText("No LLM connected")
             self.status_label.setText("Connect an LLM widget to start chatting")
             self.send_button.setEnabled(False)
+            self.add_chat_button.setEnabled(False)
             self.info.set_input_summary(self.info.NoInput)
         else:
             model_name = config.get("model_name", "Unknown")
             rag_status = " (RAG)" if config.get("rag_enabled") else ""
             self.llm_info_label.setText(f"✓ {model_name}{rag_status}")
-            self.status_label.setText(f"Ready - {model_name}{rag_status}")
-            self.send_button.setEnabled(True)
+            
+            # Enable new conversation button
+            self.add_chat_button.setEnabled(True)
+            
+            # Enable send button only if there's a current chat
+            has_chat = self.current_chat_id is not None and self.current_chat_id in self.chats
+            self.send_button.setEnabled(has_chat)
+            
+            if has_chat:
+                self.status_label.setText(f"Ready - {model_name}{rag_status}")
+            else:
+                self.status_label.setText(f"{model_name}{rag_status} connected - Create a conversation to start")
+            
             self.info.set_input_summary(f"{model_name}{rag_status}")
+            self.selected_llm = model_name
 
     def create_star_icon(self, filled=True, color="#FFD700"):
         """Creates a star icon from SVG"""
@@ -459,6 +471,13 @@ class OWChatbot(widget.OWWidget):
 
         # Load messages
         self.reload_chat_messages()
+        
+        # Enable send button if LLM is connected
+        if self.llm_config is not None:
+            self.send_button.setEnabled(True)
+            model_name = self.llm_config.get("model_name", "Unknown")
+            rag_status = " (RAG)" if self.llm_config.get("rag_enabled") else ""
+            self.status_label.setText(f"Ready - {model_name}{rag_status}")
 
     def text_input_key_press(self, event):
         """Handle key press events in text input"""
@@ -489,6 +508,9 @@ class OWChatbot(widget.OWWidget):
         """Reload and display all messages in the current chat"""
         self.clear_layout(self.chat_content_layout)
         self.chat_content_layout.addStretch(1)
+
+        if self.current_chat_id is None or self.current_chat_id not in self.chats:
+            return
 
         chat = self.chats[self.current_chat_id]
         for msg in chat.messages:
@@ -660,9 +682,12 @@ class OWChatbot(widget.OWWidget):
                 self.scroll_area.verticalScrollBar().maximum()
             )
 
+        # Capture the chat_id to prevent context bleeding if user switches chats
+        originating_chat_id = self.current_chat_id
+        
         self.worker.partial.connect(update_bot_bubble)
         self.worker.finished.connect(
-            lambda response: self.on_llm_finished(response, user_msg, bot_bubble, bot_row)
+            lambda response: self.on_llm_finished(response, user_msg, bot_bubble, bot_row, originating_chat_id)
         )
         self.worker.start()
 
@@ -768,7 +793,7 @@ class OWChatbot(widget.OWWidget):
 
         return container, row
 
-    def on_llm_finished(self, response, user_msg, bot_bubble, bot_row):
+    def on_llm_finished(self, response, user_msg, bot_bubble, bot_row, originating_chat_id):
         """Handle LLM response completion"""
         bot_bubble.setVisible(True)
         bot_bubble.setText(response)
@@ -784,7 +809,12 @@ class OWChatbot(widget.OWWidget):
         })
 
         self.set_sending_state(False)
-        self.reload_chat_messages()
+        
+        # Only reload if we're still viewing the same chat where the message was sent
+        # This prevents context bleeding if user switched chats during LLM processing
+        if self.current_chat_id == originating_chat_id:
+            self.reload_chat_messages()
+        
         self.commit.deferred()
 
     def set_sending_state(self, sending: bool):
