@@ -100,9 +100,9 @@ def clear_vector_store():
         print(f"Error clearing vector store: {e}")
         return False
 
-def generate_doc_hash(text: str) -> str:
-    """Generate a hash for document deduplication"""
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
+def generate_doc_hash(text: str, doc_id: str = "") -> str:
+    """Generate a hash for chunk deduplication, scoped to a source document"""
+    return hashlib.md5(f"{doc_id}:{text}".encode('utf-8')).hexdigest()
 
 def get_existing_doc_hashes() -> set:
     """Get all document hashes currently in the vector store"""
@@ -119,6 +119,24 @@ def get_existing_doc_hashes() -> set:
     except Exception as e:
         print(f"Error getting document hashes: {e}")
         return set()
+
+def get_indexed_documents() -> List[Tuple[str, str]]:
+    """Return unique (doc_id, doc_label) pairs for all indexed source documents, sorted by label"""
+    try:
+        vector_store = get_vector_store()
+        collection = vector_store._collection
+        results = collection.get(include=['metadatas'])
+        seen = {}
+        if results and 'metadatas' in results:
+            for metadata in results['metadatas']:
+                if metadata and 'doc_id' in metadata and 'doc_label' in metadata:
+                    doc_id = metadata['doc_id']
+                    if doc_id not in seen:
+                        seen[doc_id] = metadata['doc_label']
+        return sorted(seen.items(), key=lambda x: x[1])
+    except Exception as e:
+        print(f"Error getting indexed documents: {e}")
+        return []
 
 def add_documents_with_tracking(documents_with_metadata):
     """
@@ -140,7 +158,7 @@ def add_documents_with_tracking(documents_with_metadata):
     skipped_count = 0
     
     for text, metadata in documents_with_metadata:
-        doc_hash = generate_doc_hash(text)
+        doc_hash = generate_doc_hash(text, metadata.get("doc_id", ""))
         
         if doc_hash in existing_hashes:
             skipped_count += 1
@@ -161,14 +179,70 @@ def add_documents_with_tracking(documents_with_metadata):
 # Lazy Initialization Helpers
 # =====================
 
-def get_text_splitter():
-    """Get text splitter instance"""
+def semantic_split(text: str) -> List[str]:
+    """
+    Primary split: break text into coarse semantic units before size-based splitting.
+    Splits on Markdown/plain-text headings, horizontal rules, blank-line-separated
+    paragraphs, and list blocks (lines starting with -, *, +, or a number).
+    Empty units are discarded.
+    """
+    import re
+
+    # Normalise line endings
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+    # Split on:
+    #   - Markdown headings  (## Heading)
+    #   - Setext headings    (underlined with === or ---)
+    #   - Horizontal rules   (--- / *** / ===  on their own line)
+    #   - Two or more blank lines (section break)
+    boundary = re.compile(
+        r'(?:^(?:#{1,6})[ \t].+$)'            # ATX headings
+        r'|(?:^.+\n[ \t]*(?:={3,}|-{3,})[ \t]*$)'  # Setext headings
+        r'|(?:^[ \t]*(?:-{3,}|\*{3,}|={3,})[ \t]*$)'  # Horizontal rules
+        r'|(?:\n{2,})',                         # Paragraph / section gaps
+        re.MULTILINE,
+    )
+
+    # Keep the matched boundary text attached to the unit that precedes it
+    # by splitting around matches and stripping empties.
+    parts = boundary.split(text)
+
+    # Re-attach list blocks that ended up in the same part
+    # (they remain intact because blank-line splitting already separated them)
+    units = []
+    list_block: List[str] = []
+    list_re = re.compile(r'^[ \t]*(?:[-*+]|\d+[.)]) ', re.MULTILINE)
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        lines = part.splitlines()
+        # If every non-empty line looks like a list item, treat as one block
+        non_empty = [l for l in lines if l.strip()]
+        if non_empty and all(list_re.match(l) for l in non_empty):
+            list_block.append(part)
+        else:
+            if list_block:
+                units.append('\n'.join(list_block))
+                list_block = []
+            units.append(part)
+    if list_block:
+        units.append('\n'.join(list_block))
+
+    return units if units else [text]
+
+
+def get_text_splitter(chunk_size: int = 500, chunk_overlap: int = 75):
+    """Secondary size-based splitter applied after semantic_split"""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
-    
+
     return RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
         length_function=len,
+        separators=["\n\n", "\n", " ", ""],
     )
 
 def get_prompt():
