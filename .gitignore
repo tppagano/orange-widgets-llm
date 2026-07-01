@@ -87,4 +87,14 @@ ENV/
 env.bak/
 venv.bak/
 
-vector_store/*
+vector_store/
+backups/
+entrega_mudancas/
+erro_orange_crash.txt
+erro_owrag_preview.txt
+orange3_chatbot_dataset_prompt.zip
+orange3_chatbot_dataset_prompt_v1_funcionando.zip
+vector_store_backup/
+requirements_atual.txt
+requirements_demo.txt
+requirements_funcionando.txt

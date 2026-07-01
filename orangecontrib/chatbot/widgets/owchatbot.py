@@ -115,6 +115,62 @@ class LLMWorker(QThread):
                 self.partial.emit(out)
                 time.sleep(0.045)
             self.finished.emit(response)
+
+        elif self.llm_config and self.llm_config.get("dataset_prompt_enabled"):
+            # Use LLM directly with Dataset Prompt flow
+            try:
+                model_config = self.llm_config
+                prompt_config = model_config.get("prompt_config") or {}
+
+                if model_config["model_type"] == "ollama":
+                    from langchain_community.llms import Ollama
+                    llm = Ollama(
+                        model=model_config["model"],
+                        temperature=model_config.get("temperature", 0.7),
+                        num_ctx=model_config.get("max_tokens", 4096)
+                    )
+                else:
+                    raise ValueError(f"Unknown model type: {model_config['model_type']}")
+
+                question_column = prompt_config.get("question_column", "question")
+                answer_column = prompt_config.get("answer_column", "expected answer")
+                total_examples = prompt_config.get("total_examples", 0)
+
+                full_prompt = f"""
+Você está respondendo perguntas vindas de um dataset tabular.
+
+Informações do dataset:
+- Coluna de pergunta: {question_column}
+- Coluna de resposta esperada: {answer_column}
+- Total de exemplos no dataset: {total_examples}
+
+A resposta esperada do dataset NÃO deve ser usada para responder agora.
+Ela será usada futuramente apenas para calcular métricas.
+
+Responda diretamente à pergunta abaixo, de forma clara e objetiva.
+
+Pergunta:
+{self.prompt}
+"""
+
+                raw_response = llm.invoke(full_prompt)
+                response = str(raw_response)
+
+                words = re.findall(r'\S+|\s+', response)
+                out = ""
+                for word in words:
+                    out += word
+                    self.partial.emit(out)
+                    time.sleep(0.045)
+
+                self.finished.emit(response)
+
+            except Exception as e:
+                error_msg = f"Erro ao processar Dataset Prompt: {str(e)}"
+                self.partial.emit(error_msg)
+                self.finished.emit(error_msg)        
+
+        
         elif not RAG_AVAILABLE or not self.llm_config or not self.llm_config.get("rag_enabled"):
             # Simple response without RAG
             model_name = self.llm_config.get("model_name", "unknown") if self.llm_config else "unknown"
