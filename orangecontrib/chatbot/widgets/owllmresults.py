@@ -9,6 +9,7 @@ Views:
 - Summary: average metrics by layer/model.
 - Question Details: target, responses and metrics for one selected question.
 - Raw Results: full table for export/debugging.
+- Chart: grouped bar chart comparing metrics across layers.
 """
 
 import json
@@ -21,7 +22,8 @@ from collections import Counter
 
 import numpy as np
 
-from AnyQt.QtCore import QThread, pyqtSignal
+from AnyQt.QtCore import QThread, pyqtSignal, Qt
+from AnyQt.QtGui import QColor, QCursor
 from AnyQt.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
@@ -34,7 +36,16 @@ from AnyQt.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
     QTabWidget,
+    QSizePolicy,
+    QToolTip,
 )
+
+try:
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+except ImportError:  # matplotlib < 3.5 or Qt5-only builds
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
+from matplotlib.figure import Figure
 
 from Orange.data import Table, Domain, StringVariable
 from Orange.widgets import widget, gui, settings
@@ -726,6 +737,7 @@ class OWLLMResults(widget.OWWidget):
         self._setup_summary_tab()
         self._setup_details_tab()
         self._setup_raw_tab()
+        self._setup_chart_tab()
 
         self.mainArea.layout().addWidget(self.main_widget)
 
@@ -739,6 +751,7 @@ class OWLLMResults(widget.OWWidget):
         self.summary_table = QTableWidget()
         self.summary_table.setColumnCount(0)
         self.summary_table.setRowCount(0)
+        self.summary_table.setAlternatingRowColors(True)
         self.summary_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.summary_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.summary_table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -749,10 +762,24 @@ class OWLLMResults(widget.OWWidget):
             QHeaderView.Interactive
         )
         self.summary_table.horizontalHeader().setStretchLastSection(True)
+        self.summary_table.horizontalHeader().setStyleSheet(
+            "QHeaderView::section {"
+            " background-color: #34495e;"
+            " color: white;"
+            " font-weight: bold;"
+            " padding: 6px;"
+            " border: 1px solid #2c3e50;"
+            " }"
+        )
 
         layout.addWidget(self.summary_table)
 
         self.tabs.addTab(self.summary_tab, "Summary")
+
+        self._show_table_placeholder(
+            self.summary_table,
+            "Conecte os LLM Configs e clique em 'Run Evaluation' para ver os resultados aqui.",
+        )
 
     def _setup_details_tab(self):
         self.details_tab = QWidget()
@@ -834,6 +861,51 @@ class OWLLMResults(widget.OWWidget):
         layout.addWidget(self.raw_results_table)
 
         self.tabs.addTab(self.raw_tab, "Raw Results")
+
+    def _setup_chart_tab(self):
+        self.chart_tab = QWidget()
+        layout = QVBoxLayout(self.chart_tab)
+
+        title = QLabel("Chart - metric comparison across layers")
+        layout.addWidget(title)
+
+        layout.setContentsMargins(6, 6, 6, 6)
+
+        self.chart_figure = Figure(figsize=(8, 5))
+        self.chart_canvas = FigureCanvas(self.chart_figure)
+        self.chart_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.chart_canvas.setMinimumHeight(400)
+        layout.addWidget(self.chart_canvas, 1)
+
+        self.chart_bars = []
+
+        self.chart_canvas.mpl_connect("motion_notify_event", self._on_chart_hover)
+        self.chart_canvas.mpl_connect(
+            "axes_leave_event", lambda event: QToolTip.hideText()
+        )
+
+        self.tabs.addTab(self.chart_tab, "Chart")
+
+        self._update_chart()
+
+    def _on_chart_hover(self, event):
+        """Show the exact value in a tooltip when hovering over a bar."""
+        if event.inaxes is None or not self.chart_bars:
+            QToolTip.hideText()
+            return
+
+        for patch, layer_name, metric_name, value in self.chart_bars:
+            contains, _ = patch.contains(event)
+
+            if contains:
+                QToolTip.showText(
+                    QCursor.pos(),
+                    f"{layer_name}\n{metric_name}: {value:.4f}",
+                    self.chart_canvas,
+                )
+                return
+
+        QToolTip.hideText()
 
     def _metrics_config(self):
         return {
@@ -964,7 +1036,6 @@ class OWLLMResults(widget.OWWidget):
 
     def _clear_result_views(self):
         for table in [
-            self.summary_table,
             self.question_table,
             self.details_table,
             self.raw_results_table,
@@ -973,8 +1044,38 @@ class OWLLMResults(widget.OWWidget):
             table.setRowCount(0)
             table.setColumnCount(0)
 
+        self._show_table_placeholder(
+            self.summary_table,
+            "Conecte os LLM Configs e clique em 'Run Evaluation' para ver os resultados aqui.",
+        )
+
         self.question_text.clear()
         self.target_text.clear()
+
+        self._update_chart()
+
+    def _show_table_placeholder(self, table, message):
+        """Show a centered, muted message spanning the table instead of an empty grid."""
+        table.clear()
+        table.setColumnCount(1)
+        table.setRowCount(1)
+        table.setHorizontalHeaderLabels([""])
+        table.horizontalHeader().setVisible(False)
+        table.verticalHeader().setVisible(False)
+
+        item = QTableWidgetItem(message)
+        item.setTextAlignment(Qt.AlignCenter)
+        item.setFlags(Qt.ItemIsEnabled)
+
+        font = item.font()
+        font.setItalic(True)
+        font.setPointSize(font.pointSize() + 1)
+        item.setFont(font)
+        item.setForeground(QColor("#7f8c8d"))
+
+        table.setItem(0, 0, item)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        table.verticalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
 
     def _build_display_layer_names(self, configs):
         names = []
@@ -1157,12 +1258,17 @@ class OWLLMResults(widget.OWWidget):
         self._update_summary_table()
         self._update_question_list()
         self._update_raw_table()
+        self._update_chart()
 
         if self.results:
             self.question_table.selectRow(0)
             self._update_question_details(0)
 
         self.tabs.setCurrentWidget(self.summary_tab)
+
+    # ------------------------------------------------------------------
+    # Summary table: colored header + heatmap cells
+    # ------------------------------------------------------------------
 
     def _update_summary_table(self):
         metric_columns = self.metric_suffixes or self._current_metric_suffixes()
@@ -1171,18 +1277,41 @@ class OWLLMResults(widget.OWWidget):
         summary_headers.extend(metric_columns)
 
         self.summary_table.clear()
+        self.summary_table.horizontalHeader().setVisible(True)
+        self.summary_table.verticalHeader().setVisible(True)
         self.summary_table.setColumnCount(len(summary_headers))
         self.summary_table.setRowCount(len(self.layer_names))
         self.summary_table.setHorizontalHeaderLabels(summary_headers)
 
+        # A previous placeholder message locks row 0's height to "Stretch"
+        # (see _show_table_placeholder). Reset every row back to a normal,
+        # content-based height or row 0 ends up stretched to fill the tab.
+        self.summary_table.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+
+        if not self.layer_names:
+            self._show_table_placeholder(
+                self.summary_table,
+                "Nenhum resultado ainda. Clique em 'Run Evaluation'.",
+            )
+            return
+
         for row_idx, layer_name in enumerate(self.layer_names):
-            self.summary_table.setItem(row_idx, 0, QTableWidgetItem(layer_name))
+            layer_item = QTableWidgetItem(layer_name)
+            bold_font = layer_item.font()
+            bold_font.setBold(True)
+            layer_item.setFont(bold_font)
+            self.summary_table.setItem(row_idx, 0, layer_item)
 
             for col_idx, metric in enumerate(metric_columns, 1):
                 avg_value = self._average_metric(layer_name, metric)
-                self.summary_table.setItem(row_idx, col_idx, QTableWidgetItem(avg_value))
+                item = QTableWidgetItem(avg_value)
+                item.setTextAlignment(Qt.AlignCenter)
+                self.summary_table.setItem(row_idx, col_idx, item)
 
         self.summary_table.resizeColumnsToContents()
+        self.summary_table.resizeRowsToContents()
 
         for col_idx, header in enumerate(summary_headers):
             if header == "Layer":
@@ -1347,6 +1476,81 @@ class OWLLMResults(widget.OWWidget):
                 self.raw_results_table.setColumnWidth(col_idx, 120)
             elif col_idx >= 3:
                 self.raw_results_table.setColumnWidth(col_idx, 420)
+
+    # ------------------------------------------------------------------
+    # Chart tab: grouped bar chart comparing layers across metrics
+    # ------------------------------------------------------------------
+
+    def _update_chart(self):
+        self.chart_figure.clear()
+        self.chart_bars = []
+        ax = self.chart_figure.add_subplot(111)
+
+        if not self.results or not self.layer_names:
+            ax.text(
+                0.5,
+                0.5,
+                "Execute a avaliação ('Run Evaluation') para ver o gráfico aqui.",
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="#7f8c8d",
+            )
+            ax.axis("off")
+            self.chart_canvas.draw()
+            return
+
+        # Time is excluded: it's measured in seconds, not a 0-1 score, so it
+        # would distort the shared y-axis used for the other metrics.
+        metric_columns = [
+            metric
+            for metric in (self.metric_suffixes or self._current_metric_suffixes())
+            if metric != "time"
+        ]
+
+        if not metric_columns:
+            ax.text(
+                0.5,
+                0.5,
+                "Nenhuma métrica numérica selecionada para exibir no gráfico.",
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="#7f8c8d",
+            )
+            ax.axis("off")
+            self.chart_canvas.draw()
+            return
+
+        n_layers = len(self.layer_names)
+        n_metrics = len(metric_columns)
+        x_positions = np.arange(n_metrics)
+        bar_width = min(0.8 / max(n_layers, 1), 0.2)
+
+        for layer_idx, layer_name in enumerate(self.layer_names):
+            values = []
+
+            for metric in metric_columns:
+                avg_text = self._average_metric(layer_name, metric)
+                value = safe_float(avg_text)
+                values.append(value if value is not None else 0.0)
+
+            offset = (layer_idx - (n_layers - 1) / 2) * bar_width
+            bars = ax.bar(x_positions + offset, values, bar_width, label=layer_name)
+
+            for patch, metric_name, value in zip(bars, metric_columns, values):
+                self.chart_bars.append((patch, layer_name, metric_name, value))
+
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(metric_columns, rotation=30, ha="right")
+        ax.set_ylabel("Score (0-1)")
+        ax.set_ylim(0, 1.05)
+        ax.set_title("Média das métricas por layer")
+        ax.legend(fontsize=8, loc="upper right")
+        ax.grid(axis="y", linestyle="--", alpha=0.4)
+
+        self.chart_figure.tight_layout()
+        self.chart_canvas.draw()
 
     def commit(self):
         if not self.results:
