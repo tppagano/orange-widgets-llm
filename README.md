@@ -58,7 +58,7 @@ Ou siga as instruções disponíveis na documentação oficial do Orange.
 Clone o repositório para sua máquina utilizando o Git:
 
 ```bash
-git clone https://github.com/SEU_USUARIO/orange-widgets-llm.git
+git clone https://github.com/tppagano/orange-widgets-llm
 ```
 
 Acesse o diretório do projeto:
