@@ -37,19 +37,7 @@ Antes de utilizar o projeto, certifique-se de possuir os seguintes requisitos in
 
 Siga os passos abaixo para configurar o ambiente e instalar o projeto.
 
-## 1. Instale o Orange Data Mining
-
-Caso ainda não possua o Orange Data Mining instalado, execute:
-
-```bash
-pip install Orange3
-```
-
-Ou siga as instruções disponíveis na documentação oficial do Orange.
-
----
-
-## 2. Clone o repositório
+## 1. Clone o repositório
 
 Clone o repositório para sua máquina utilizando o Git:
 
@@ -57,19 +45,21 @@ Clone o repositório para sua máquina utilizando o Git:
 git clone https://github.com/tppagano/orange-widgets-llm
 ```
 
-Acesse o diretório do projeto:
+## 2. Acesse o diretório do projeto
+
+Navegue até o diretório onde o repositório foi clonado.
+
+Exemplo:
 
 ```bash
 cd orange-widgets-llm
 ```
 
----
-
-## 3. Crie um ambiente virtual (Opcional)
+## 3. Crie um ambiente virtual
 
 Embora não seja obrigatório, recomenda-se utilizar um ambiente virtual para evitar conflitos entre dependências.
 
-Crie o ambiente:
+Crie o ambiente virtual:
 
 ```bash
 python -m venv .venv
@@ -89,9 +79,17 @@ Ative o ambiente.
 source .venv/bin/activate
 ```
 
----
+## 4. Instale o Orange Data Mining
 
-## 4. Instale as dependências
+Caso ainda não possua o Orange Data Mining instalado, execute:
+
+```bash
+pip install Orange3
+```
+
+Ou siga as instruções disponíveis na documentação oficial do Orange.
+
+## 5. Instale as dependências
 
 Instale todas as dependências necessárias utilizando o arquivo `requirements.txt`:
 
@@ -99,9 +97,7 @@ Instale todas as dependências necessárias utilizando o arquivo `requirements.t
 pip install -r requirements.txt
 ```
 
----
-
-## 5. Instale o add-on
+## 6. Instale o add-on
 
 Com as dependências instaladas, execute:
 
@@ -111,24 +107,21 @@ pip install -e .
 
 Esse comando instala o projeto em modo editável, permitindo que alterações no código sejam refletidas imediatamente sem a necessidade de reinstalação.
 
----
-
-## 6. Instale o Ollama
+## 7. Instale o Ollama
 
 Faça o download e instale o Ollama seguindo as instruções disponíveis em seu site oficial.
 
 > **Observação:** O gerenciamento dos modelos de linguagem é realizado diretamente pelos widgets do projeto.
 
----
-
-## 7. Execute o Orange Data Mining
+## 8. Execute o Orange Data Mining
 
 Após concluir a instalação, abra o Orange Data Mining.
 
-Caso tenha instalado via `pip`, também é possível iniciá-lo pelo terminal utilizando:
+Caso tenha instalado o Orange via `pip`, também é possível iniciá-lo pelo terminal utilizando:
 
 ```bash
 orange-canvas
+```
 
 Os widgets do projeto estarão disponíveis na caixa de ferramentas do Orange.
 
@@ -163,7 +156,6 @@ orange-widgets-llm/
 | `resources/` | Recursos utilizados pela interface, como ícones e arquivos auxiliares. |
 | `screenshots/` | Imagens utilizadas na documentação do projeto. |
 
-> **Observação:** A estrutura do projeto poderá sofrer alterações durante o desenvolvimento.
 
 # Guia de Utilização
 
@@ -180,7 +172,7 @@ O fluxo básico de utilização consiste nas seguintes etapas:
 7. Conectar todos os widgets **LLM** ao widget **LLM Results**.
 8. Executar o workflow e analisar os resultados obtidos.
 
-> **Observação:** A configuração de cada widget será apresentada em uma documentação específica nas próximas versões do projeto.
+
 
 ### Exemplo de Workflow
 
