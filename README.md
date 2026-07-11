@@ -177,7 +177,7 @@ O fluxo básico de utilização consiste nas seguintes etapas:
 ### Exemplo de Workflow
 
 <p align="center">
-  <img src="screenshots/workflow.png" alt="Workflow básico" width="900">
+  <img src="screenshots/example_.png" alt="Workflow básico" width="900">
 </p>
 
 # Licença
