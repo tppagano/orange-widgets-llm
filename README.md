@@ -1,5 +1,5 @@
 orange-widgets-llm
-#Descrição
+# Descrição
 
 O orange-widgets-llm é um conjunto de widgets desenvolvidos para o Orange Data Mining com o objetivo de facilitar a criação de fluxos de avaliação utilizando Large Language Models (LLMs).
 
