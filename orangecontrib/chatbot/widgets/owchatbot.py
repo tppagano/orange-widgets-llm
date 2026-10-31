@@ -120,9 +120,9 @@ class LLMWorker(QThread):
         model_config = self.llm_config or {}
 
         if model_config.get("model_type") == "ollama":
-            from langchain_community.llms import Ollama
+            from langchain_ollama import OllamaLLM
 
-            return Ollama(
+            return OllamaLLM(
                 model=model_config["model"],
                 temperature=model_config.get("temperature", 0.7),
                 num_ctx=model_config.get("max_tokens", 4096),

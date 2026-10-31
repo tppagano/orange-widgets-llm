@@ -43,9 +43,12 @@ CLASSIFIERS = [
 ]
 
 INSTALL_REQUIRES = [
-    "Orange3>=3.31.0",
-    "PyQt5>=5.12.0",
-    "langchain-community",
+    "Orange3>=3.40.0",
+    "PyQt5>=5.15.11",
+    "langchain-core",
+    "langchain-ollama",
+    "langchain-chroma",
+    "langchain-text-splitters",
     "chromadb",
     "pypdf",
 ]

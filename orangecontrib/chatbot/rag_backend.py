@@ -27,11 +27,11 @@ _retriever = None
 
 def get_llm():
     """Lazy initialization of LLM."""
-    from langchain_community.llms import Ollama
+    from langchain_ollama import OllamaLLM
 
     global _llm
     if _llm is None:
-        _llm = Ollama(
+        _llm = OllamaLLM(
             model=LLM_MODEL,
             num_ctx=4096,
         )
@@ -40,7 +40,7 @@ def get_llm():
 
 def get_embeddings():
     """Lazy initialization of embeddings."""
-    from langchain_community.embeddings import OllamaEmbeddings
+    from langchain_ollama import OllamaEmbeddings
 
     global _embeddings
     if _embeddings is None:
@@ -52,7 +52,7 @@ def get_embeddings():
 
 def get_vector_store():
     """Lazy initialization of vector store."""
-    from langchain_community.vectorstores import Chroma
+    from langchain_chroma import Chroma
 
     global _vector_store
     if _vector_store is None:
@@ -72,13 +72,6 @@ def get_retriever():
             search_kwargs={"k": 2}
         )
     return _retriever
-
-
-def persist_vector_store():
-    """Explicitly persist the vector store to disk."""
-    vector_store = get_vector_store()
-    if hasattr(vector_store, "persist"):
-        vector_store.persist()
 
 
 def get_vector_store_doc_count():
@@ -189,7 +182,7 @@ def add_documents_with_tracking(documents_with_metadata):
     Returns:
         Tuple of (added_count, skipped_count).
     """
-    from langchain.schema import Document
+    from langchain_core.documents import Document
 
     vector_store = get_vector_store()
     existing_hashes = get_existing_doc_hashes()
@@ -222,7 +215,6 @@ def add_documents_with_tracking(documents_with_metadata):
 
     if docs_to_add:
         vector_store.add_documents(docs_to_add)
-        persist_vector_store()
 
     return added_count, skipped_count
 
@@ -298,7 +290,7 @@ def get_text_splitter(
     chunk_overlap: int = 75,
 ):
     """Secondary size-based splitter applied after semantic_split."""
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
 
     return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -319,7 +311,7 @@ def get_prompt():
     The manual prompt instruction comes from the Prompt widget.
     The question continues to come from the Chatbot.
     """
-    from langchain.prompts import PromptTemplate
+    from langchain_core.prompts import PromptTemplate
 
     prompt_template = """
 Siga as orientações abaixo ao produzir a resposta.
@@ -425,7 +417,6 @@ def ingest_pdfs(file_paths: List[str]) -> None:
     )
 
     get_vector_store().add_documents(splits)
-    persist_vector_store()
 
 
 # =====================
@@ -509,11 +500,11 @@ def stream_chain_with_history(
         prompt_instruction:
             Manual orientation received from the Prompt widget.
     """
-    from langchain_community.llms import Ollama
+    from langchain_ollama import OllamaLLM
     from langchain_core.runnables import RunnablePassthrough
 
     if llm is None:
-        llm = Ollama(
+        llm = OllamaLLM(
             model=LLM_MODEL,
             num_ctx=4096,
         )

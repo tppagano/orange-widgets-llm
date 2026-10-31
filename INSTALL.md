@@ -1,215 +1,285 @@
 # Add-on Orange3 Chatbot - Guia de Instalação
 
-## Escolha seu Gerenciador de Ambiente
+Este guia descreve como configurar o ambiente, instalar o add-on, configurar o Ollama e verificar se tudo está funcionando.
 
-Este add-on suporta instalação com **pip** (venv, virtualenv, pyenv) ou **Conda**. Escolha o método que você prefere:
+## Requisitos
 
-- **[Instalação com pip](#instalação-com-pip)** - Recomendado para usuários de venv, virtualenv, pyenv
-- **[Instalação com Conda](#instalação-com-conda)** - Recomendado para usuários Conda, especialmente com GPU
+- Python 3.13 (versão utilizada no desenvolvimento e nos testes atuais).
+- Orange3 3.40.0 ou compatível.
+- Ollama instalado e em execução.
+- Git, caso o projeto tenha sido obtido por meio de um repositório.
+
+> **Importante:** o Ollama é instalado separadamente do ambiente Python. Os modelos são baixados e executados pelo próprio Ollama.
 
 ---
 
-## Instalação com pip
+## 1. Instalação com pip e ambiente virtual
 
-### 1. Instalar o Orange3 (se ainda não estiver instalado)
+Este é o método recomendado para instalações com `venv`, `virtualenv` ou `pyenv`.
+
+### 1.1. Criar e ativar o ambiente
+
+Na raiz do projeto, execute:
 
 ```bash
-pip install Orange3
+python3.13 -m venv .venv
+source .venv/bin/activate
 ```
 
-### 2. Instalar o Add-on Chatbot
-
-Do diretório do projeto:
+Se estiver usando pyenv, selecione primeiro a versão desejada:
 
 ```bash
-pip install -e .
+pyenv local 3.13
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-Isso instala o add-on em modo de desenvolvimento, permitindo fazer mudanças e vê-las imediatamente.
+### 1.2. Instalar as dependências
 
-### 3. Verificar Instalação
+Atualize o pip e instale as dependências declaradas no projeto:
 
 ```bash
-# Verificar se o Orange3 reconhece o add-on
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+### 1.3. Instalar o add-on em modo de desenvolvimento
+
+Ainda na raiz do projeto:
+
+```bash
+python -m pip install -e .
+```
+
+A instalação editável permite alterar o código do add-on sem precisar reinstalá-lo a cada mudança.
+
+### 1.4. Verificar a instalação
+
+```bash
+# Verificar se o pacote pode ser importado
 python -c "from orangecontrib.chatbot import __version__; print(f'Versão do add-on Chatbot: {__version__}')"
 
-# Listar todos os add-ons do Orange3
-pip list | grep -i orange
+# Verificar dependências
+python -m pip check
+
+# Listar os pacotes relacionados ao Orange
+python -m pip list | grep -i orange
 ```
 
-A saída esperada deve incluir:
-```
-Versão do add-on Chatbot: [Versão]
-```
-
-### 4. Configurar Ollama
-
-```bash
-# Baixar de https://ollama.ai e instalar
-
-# Baixar modelos necessários
-ollama pull llama3.1:8b
-ollama pull znbang/bge:small-en-v1.5-f32
-```
-
-### 5. Testar o Widget
-
-#### Opção A: Visualizar Widget Individualmente
-
-```bash
-cd orangecontrib/chatbot/widgets
-python owchatbot.py
-```
-
-#### Opção B: Iniciar Orange3
-
-```bash
-orange-canvas
-```
-
-Então procure a categoria "Chatbot" na caixa de ferramentas de widgets.
+O comando `pip check` deve informar que não há dependências quebradas.
 
 ---
 
-## Instalação com Conda
+## 2. Instalação com Conda
 
-### 1. Criar e Ativar Ambiente Conda
+Se você prefere gerenciar ambientes com Conda, crie um ambiente Python e instale as dependências do projeto com pip dentro dele.
+
+### 2.1. Criar e ativar o ambiente
 
 ```bash
-# Criar ambiente
-conda create -n chatbot python=3.9
+conda create -n chatbot python=3.13
 conda activate chatbot
 ```
 
-### 2. Escolher Método de Instalação
+### 2.2. Instalar as dependências e o add-on
 
-#### Opção A: Híbrido Conda + Pip (Recomendado para GPU)
-
-Instale pacotes críticos via conda, especialmente PyTorch para suporte GPU:
+Na raiz do projeto:
 
 ```bash
-# Instalar Orange3 via conda-forge
-conda install -c conda-forge orange3
-
-# Instalar PyTorch via conda (melhor para GPU)
-conda install pytorch -c pytorch
-# OU para GPU com CUDA:
-# conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
-
-# Instalar dependências restantes via pip
-pip install langchain-community chromadb sentence-transformers
-
-# Instalar add-on em modo desenvolvimento
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
-#### Opção B: Apenas Pip dentro do Conda
+O `requirements.txt` contém as dependências Python utilizadas pelo projeto. Não é necessário instalar `langchain-community`, PyTorch ou `sentence-transformers` separadamente para o fluxo atual baseado em Ollama.
 
-Use apenas pip dentro do ambiente conda:
-
-```bash
-# Instalar tudo com pip
-pip install Orange3
-pip install -e .
-```
-
-⚠️ **Aviso**: PyTorch instalado via pip pode ter problemas com GPU. Use a Opção A se precisar de aceleração GPU.
-
-### 3. Configurar Ollama
+### 2.3. Verificar a instalação
 
 ```bash
-# Baixar de https://ollama.ai e instalar
-
-# Baixar modelos necessários
-ollama pull llama3.1:8b
-ollama pull znbang/bge:small-en-v1.5-f32
-```
-
-### 4. Testar o Widget
-
-```bash
-# Iniciar Orange3
-orange-canvas
-```
-
-Então procure a categoria "Chatbot" na caixa de ferramentas de widgets.
-
-### 5. Verificar Instalação
-
-```bash
-# Verificar se o Orange3 reconhece o add-on
+python -m pip check
 python -c "from orangecontrib.chatbot import __version__; print(f'Versão do add-on Chatbot: {__version__}')"
-
-# Verificar PyTorch e CUDA (se aplicável)
-python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA disponível: {torch.cuda.is_available()}')"
 ```
 
 ---
 
-## Desinstalar
+## 3. Configurar o Ollama
+
+O Ollama precisa estar instalado e em execução antes de utilizar as funções que consultam os modelos.
+
+Instale o Ollama seguindo as instruções do site oficial:
+
+https://ollama.com/
+
+Depois, baixe os modelos utilizados pelo projeto:
 
 ```bash
-pip uninstall Orange3-Chatbot
+ollama pull llama3.1:8b
+ollama pull znbang/bge:small-en-v1.5-f32
 ```
 
-## Modo de Desenvolvimento
-
-Se você quer fazer mudanças no código:
+Confirme que os modelos estão disponíveis:
 
 ```bash
-# Instalar em modo editável (já feito no passo 2)
-pip install -e .
+ollama list
+```
 
-# Faça suas mudanças no código
+Se o Ollama não estiver sendo executado como serviço no seu sistema, inicie-o em outro terminal:
 
-# Não é necessário reinstalar - as mudanças têm efeito imediatamente
+```bash
+ollama serve
+```
 
-# Reinicie o Orange3 para ver as mudanças
+Os nomes dos modelos devem corresponder aos configurados em `rag_backend.py`.
+
+---
+
+## 4. Executar o Orange3 e testar o widget
+
+### Opção A: executar o widget individualmente
+
+A partir da raiz do projeto:
+
+```bash
+python orangecontrib/chatbot/widgets/owchatbot.py
+```
+
+Essa opção é útil para testar a interface do widget durante o desenvolvimento. Dependendo de como o widget importa os módulos do pacote, a execução pelo Orange Canvas pode ser necessária para testar o fluxo completo.
+
+### Opção B: iniciar o Orange Canvas
+
+```bash
 orange-canvas
 ```
 
-## Solução de Problemas
+Procure a categoria **Chatbot** na caixa de ferramentas de widgets.
 
-### "No module named orangecontrib.chatbot"
+### 4.1. Testar o funcionamento
 
-- Certifique-se de ter instalado com `pip install -e .` da raiz do projeto
-- Verifique seu ambiente Python: `which python` ou `where python`
-- Certifique-se de que Orange3 e o add-on estão no mesmo ambiente
+Depois de abrir o widget:
 
-### Widget não aparece no Orange3
+1. Envie uma pergunta e confirme que o modelo do Ollama responde.
+2. Carregue um PDF e verifique se o documento é processado e indexado.
+3. Faça uma pergunta relacionada ao conteúdo do PDF e confira se o contexto recuperado é relevante.
+4. Feche e abra novamente o Orange e verifique se os documentos continuam disponíveis no banco vetorial.
+
+---
+
+## 5. Executar os testes automatizados
+
+Com o ambiente virtual ativado e as dependências instaladas:
 
 ```bash
-# Forçar reinstalação
-pip install -e . --force-reinstall
+python -m pip install pytest
+python -m pytest
+```
 
-# Limpar cache do Orange3 (se existir)
-rm -rf ~/.orange/cache/
+Os testes automatizados usam mocks para testar componentes sem precisar consultar modelos reais do Ollama ou modificar o banco vetorial utilizado normalmente pela aplicação.
 
-# Reiniciar Orange3
+---
+
+## 6. Desinstalar
+
+Para remover o add-on do ambiente Python:
+
+```bash
+python -m pip uninstall Orange3-Chatbot
+```
+
+Para remover também o ambiente virtual criado na raiz do projeto:
+
+```bash
+rm -rf .venv
+```
+
+A remoção do ambiente virtual não apaga os arquivos do projeto nem os dados do banco vetorial armazenados fora dele.
+
+---
+
+## 7. Modo de Desenvolvimento
+
+Para trabalhar no código do add-on:
+
+```bash
+# Ativar o ambiente virtual
+source .venv/bin/activate
+
+# Instalar em modo editável (se ainda não tiver feito)
+python -m pip install -e .
+```
+
+Faça as alterações nos arquivos do projeto. Como o pacote está instalado em modo editável, não é necessário reinstalá-lo a cada mudança.
+
+Reinicie o Orange Canvas para carregar as alterações:
+
+```bash
 orange-canvas
 ```
 
-### Erros de importação para rag_backend
+---
+
+## 8. Solução de Problemas
+
+### `No module named orangecontrib.chatbot`
+
+- Confirme que o ambiente virtual está ativado.
+- Execute `python -m pip install -e .` na raiz do projeto.
+- Verifique se o Python usado para instalar o add-on é o mesmo usado para iniciar o Orange:
 
 ```bash
-# Reinstalar o add-on para garantir que todas as dependências estão instaladas
-pip install -e . --force-reinstall
-
-# Verificar ChromaDB
-pip show chromadb
-
-# Verificar LangChain
-pip show langchain-community
+which python
+python -m pip show Orange3-Chatbot
 ```
 
-## Próximos Passos
+### O widget não aparece no Orange Canvas
 
-- Visualize widgets standalone: `python orangecontrib/chatbot/widgets/owchatbot.py`
-- Leia o [README.md](README.md) para arquitetura e uso completo
-- Veja [QUICKSTART.md](QUICKSTART.md) para começar rapidamente
+Reinstale o add-on no ambiente ativo:
+
+```bash
+python -m pip install -e . --force-reinstall
+```
+
+Depois, feche e abra novamente o Orange Canvas:
+
+```bash
+orange-canvas
+```
+
+### Erros de importação ou dependências ausentes
+
+Verifique se há dependências incompatíveis:
+
+```bash
+python -m pip check
+```
+
+Confira as dependências principais:
+
+```bash
+python -m pip show Orange3 langchain-core langchain-ollama langchain-chroma langchain-text-splitters chromadb pypdf
+```
+
+Se alguma dependência estiver ausente, reinstale a lista declarada no projeto:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### O Ollama não responde
+
+- Confirme que o Ollama está instalado.
+- Verifique se o serviço está em execução.
+- Confira se os modelos necessários aparecem em `ollama list`.
+- Verifique se os nomes configurados em `rag_backend.py` correspondem aos modelos baixados.
+
+---
+
+## 9. Próximos Passos
+
+- Consulte o [README.md](README.md) para conhecer a arquitetura e o uso do add-on.
+- Consulte o [QUICKSTART.md](QUICKSTART.md) para um guia rápido de utilização.
 
 ## Documentação
 
-- Documentação dos widgets: Veja o README.md na raiz do projeto
-- Documentação do Orange3: https://orange-data-mining-library.readthedocs.io/
-- Documentação do LangChain: https://python.langchain.com/
+- [Documentação do Orange3](https://orange-data-mining-library.readthedocs.io/)
+- [Documentação do LangChain](https://python.langchain.com/)
+- [Documentação do Ollama](https://docs.ollama.com/)
